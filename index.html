@@ -17,26 +17,22 @@ body {
   color:#fff;
   text-align:center;
   background: radial-gradient(circle at top, #1a1a2e, #0f0f1f);
-  background-image: url('https://images.unsplash.com/photo-1619983081408-dc7ab4e82c7b?auto=format&fit=crop&w=1400&q=80');
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center;
   position: relative;
 }
-body::before {
-  content:''; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.6); z-index:-1;
-}
-header { background:#111; color:#fff; padding:15px; font-size:22px; text-shadow: 0 0 10px #ff9800; }
+body::before { content:''; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.6); z-index:-1;}
+header { background:#111; color:#fff; padding:15px; font-size:22px; text-shadow: 0 0 10px #ff9800;}
 #adminPanelBtn { position: fixed; top: 15px; left: 15px; background: #222; color: #fff; border: none; width: 45px; height: 45px; border-radius: 8px; cursor: pointer; z-index: 1001; font-size: 20px; display: flex; align-items: center; justify-content: center; transition: 0.3s; box-shadow: 0 0 10px #ff9800, 0 0 20px #ff9800 inset;}
 #adminPanelBtn:hover { background: #555; transform: scale(1.1);}
 #adminPanel { display: none; position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.9); border-radius: 15px; box-shadow: 0 0 15px #ff9800; padding: 15px; width: 280px; text-align: right; z-index: 1000; color:#fff;}
 input, button { margin: 5px 0; padding: 8px; width: 100%; border-radius: 8px; border: 1px solid #ccc; font-family: "Cairo";}
 #overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:999;}
 .wheel-container { margin:30px auto; width:300px; height:300px; border-radius:50%; border:8px solid #ff9800; position:relative; overflow:hidden; box-shadow: 0 0 20px #ff9800;}
-.wheel { width:100%; height:100%; border-radius:50%; transition:5s; }
-.pointer { width:0; height:0; border-left:15px solid transparent; border-right:15px solid transparent; border-bottom:25px solid red; margin:10px auto; }
+.pointer { width:0; height:0; border-left:15px solid transparent; border-right:15px solid transparent; border-bottom:25px solid red; margin:10px auto;}
 #spinBtn { background: linear-gradient(145deg, #ff9800, #ffb74d); color:#fff; border:none; width:60px; height:60px; border-radius:10px; cursor:pointer; font-size:20px; display:inline-flex; align-items:center; justify-content:center; margin-top:10px; box-shadow:0 0 15px #ff9800, 0 0 25px #ffb74d inset;}
-#spinBtn:hover { background:#e68900; }
+#spinBtn:hover { background:#e68900;}
 .store { display:flex; flex-wrap:wrap; justify-content:center; gap:20px; padding:20px;}
 .game-card { background: rgba(255,255,255,0.1); border-radius:15px; box-shadow:0 0 10px #ff9800; width:200px; overflow:hidden; transition:0.3s; position:relative; color:#fff;}
 .game-card:hover { transform:scale(1.05); box-shadow:0 0 20px #ff9800; }
@@ -45,6 +41,7 @@ input, button { margin: 5px 0; padding: 8px; width: 100%; border-radius: 8px; bo
 .contact { background:#28a745; color:#fff; text-decoration:none; padding:5px 10px; border-radius:8px; display:inline-block; margin-bottom:10px;}
 #winnerBox { background:#d4edda; color:#155724; padding:10px; margin:15px; border-radius:10px; font-size:18px; display:none;}
 #customText { margin-top:15px; font-size:18px; color:#ffeb3b; min-height:24px; text-shadow: 0 0 8px #ff9800;}
+#alertBox { position: fixed; top: 20px; left:50%; transform:translateX(-50%); background:#ff5722; color:#fff; padding:10px 20px; border-radius:10px; display:none; z-index:2000; font-size:16px; text-shadow:0 0 5px #000;}
 </style>
 </head>
 <body>
@@ -89,10 +86,13 @@ input, button { margin: 5px 0; padding: 8px; width: 100%; border-radius: 8px; bo
 
 <h2>🕹️ ألعاب للبيع</h2>
 <div class="store" id="store"></div>
+<div id="alertBox"></div>
 
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+
 <script>
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
@@ -105,6 +105,7 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+const storage = firebase.storage();
 
 // ---------- لوحة التحكم ----------
 let adminOpen=false;
@@ -130,7 +131,7 @@ function updateCustomText(){
 db.ref('players').on('value', snapshot => { players = snapshot.val() || []; drawWheel(); });
 db.ref('games').on('value', snapshot => { games = snapshot.val() || []; showGames(); });
 db.ref('customText').on('value', snapshot => { document.getElementById("customText").innerText = snapshot.val() || ""; });
-db.ref('winner').on('value', snapshot => { winnerData = snapshot.val(); showWinner(); });
+db.ref('winner').on('value', snapshot => { winnerData = snapshot.val(); showWinner(); if(winnerData) showAlert("🏆 الفائز الجديد: " + winnerData.name); });
 
 // ---------- الوظائف ----------
 function addPlayer(){ const name=document.getElementById("playerName").value.trim(); if(name){ players.push(name); db.ref('players').set(players); document.getElementById("playerName").value=""; } }
@@ -141,16 +142,17 @@ function addGame(){
   const contact=document.getElementById("contactLink").value.trim();
   const file=document.getElementById("gameImage").files[0];
   if(name && price && contact && file){
-    const reader=new FileReader();
-    reader.onload=function(e){
-      games.push({name,price,contact,image:e.target.result});
-      db.ref('games').set(games);
-      document.getElementById("gameName").value="";
-      document.getElementById("gamePrice").value="";
-      document.getElementById("contactLink").value="";
-      document.getElementById("gameImage").value="";
-    };
-    reader.readAsDataURL(file);
+    const storageRef = storage.ref('games/' + file.name);
+    storageRef.put(file).then(snapshot => {
+      snapshot.ref.getDownloadURL().then(url => {
+        games.push({name, price, contact, image: url});
+        db.ref('games').set(games);
+        document.getElementById("gameName").value="";
+        document.getElementById("gamePrice").value="";
+        document.getElementById("contactLink").value="";
+        document.getElementById("gameImage").value="";
+      });
+    });
   }
 }
 function deleteGame(){ const name=prompt("اكتب اسم اللعبة التي تريد حذفها:"); if(name){ games = games.filter(g=>g.name!==name); db.ref('games').set(games); } }
@@ -204,6 +206,14 @@ function spin(){
     winnerData={name:winner,expiry};
     db.ref('winner').set(winnerData);
   },5000);
+}
+
+// ---------- تنبيه لجميع المستخدمين ----------
+function showAlert(msg){
+  const alertBox=document.getElementById("alertBox");
+  alertBox.innerText = msg;
+  alertBox.style.display = "block";
+  setTimeout(()=>{ alertBox.style.display = "none"; },4000);
 }
 </script>
 </body>
